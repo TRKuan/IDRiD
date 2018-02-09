@@ -45,10 +45,10 @@ class IDRiD_sub1_dataset(Dataset):
         image = Image.open(image_dir)
         if mask_dir is not None:
             mask = Image.open(mask_dir)
-            mask = np.array(mask)
+            mask = np.array(mask, dtype='int')
         else:
             w, h = image.size
-            mask = np.zeros((h, w), dtype='uint8')
+            mask = np.zeros((h, w), dtype='int')
         
         
         image = transforms.ToTensor()(image)
