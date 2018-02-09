@@ -7,6 +7,7 @@ import numpy as np
 import os
 import random
 
+
 class IDRiD_sub1_dataset(Dataset):
 
     def __init__(self, root_dir, task_type):
@@ -34,7 +35,7 @@ class IDRiD_sub1_dataset(Dataset):
             name = filename[:-4]
             self.data_idx.append((image_dir, mask_dir, name))
             
-        #random.shuffle(self.data_idx)
+        random.shuffle(self.data_idx)
         
     def __len__(self):
         return len(self.data_idx)
@@ -46,7 +47,8 @@ class IDRiD_sub1_dataset(Dataset):
             mask = Image.open(mask_dir)
             mask = np.array(mask)
         else:
-            mask = np.zeros(image.size, dtype='uint8')
+            w, h = image.size
+            mask = np.zeros((h, w), dtype='uint8')
         
         
         image = transforms.ToTensor()(image)
@@ -60,4 +62,5 @@ if __name__ == '__main__':
     print('dataset length: %d'%(len(dataset)))
     print('dataset sample')
     print(dataset[random.randint(0, len(dataset)-1)])
+
     
