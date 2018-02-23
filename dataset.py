@@ -11,56 +11,95 @@ import random
 class IDRiD_sub1_dataset(Dataset):
 
     def __init__(self, root_dir, task_type):
-        if task_type not in ['MA', 'EX', 'HE', 'SE']: 
-            raise ValueError('No such task type "%s"'%(task_type))
+        self.task_type_list = ['MA', 'EX', 'HE', 'SE']
             
         self.root_dir = root_dir
-        self.data_idx = []#(image_dir, mask_dir, name), mask_dir = None for NAR images
+        self.data_idx = []#(image_dir, mask_dirs, name), mask_dir = None for NAR images
+        self.data_cache = {'image': None, 'mask': None, 'name': "", 'index': None}
 
-        image_root = os.path.join(root_dir, 'Apparent Retinopathy')
-        image_NAR_root = os.path.join(root_dir, 'No Apparent Retinopathy')
-        mask_root = os.path.join(root_dir, task_type)
+        image_root = os.path.join(self.root_dir, 'Apparent Retinopathy')
+        image_NAR_root = os.path.join(self.root_dir, 'No Apparent Retinopathy')
         
         #Get the file index
         #AR images
-        for filename in os.listdir(mask_root):
-            image_dir = os.path.join(image_root, filename[:-7]+'.jpg')
-            mask_dir = os.path.join(mask_root, filename)
-            name = filename[:-7]
-            self.data_idx.append((image_dir, mask_dir, name))
+        for filename in os.listdir(image_root):
+            image_dir = os.path.join(image_root, filename)
+            mask_dirs = {task_type:None for task_type in self.task_type_list}
+            for task_type in self.task_type_list:
+                m_dir = os.path.join(self.root_dir, task_type, filename[:-4]+'_'+task_type+'.tif')
+                if os.path.isfile(m_dir): mask_dirs[task_type] = m_dir
+            name = filename[:-4]
+            self.data_idx.append((image_dir, mask_dirs, name))
         #NAR images
         for filename in os.listdir(image_NAR_root):
             image_dir = os.path.join(image_NAR_root, filename)
-            mask_dir = None
+            mask_dirs = {task_type:None for task_type in self.task_type_list}
             name = filename[:-4]
-            self.data_idx.append((image_dir, mask_dir, name))
+            self.data_idx.append((image_dir, mask_dirs, name))
             
         random.shuffle(self.data_idx)
         
     def __len__(self):
-        return len(self.data_idx)
+        return len(self.data_idx)*16*11
 
     def __getitem__(self, idx):
-        image_dir, mask_dir, name = self.data_idx[idx]
-        image = Image.open(image_dir)
-        if mask_dir is not None:
-            mask = Image.open(mask_dir)
-            mask = np.array(mask, dtype='int')
-        else:
-            w, h = image.size
-            mask = np.zeros((h, w), dtype='int')
+        # crop the 4288x2848 image into 256x256 => 16x11 grid
+        # 1 image => 16x11 = 176 small images
+        n = int(idx/(11*16))
+        r = int((idx%(11*16))/16)
+        c = (idx%(11*16))%16
+        if self.data_cache['index'] != n:
+            image_dir, mask_dirs, name = self.data_idx[n]
+            image = Image.open(image_dir)
+
+            masks = []
+            for task_type in self.task_type_list:
+                if mask_dirs[task_type] is not None:
+                    mask = Image.open(mask_dirs[task_type])
+                    mask = np.array(mask, dtype='int')
+                else:
+                    w, h = image.size
+                    mask = np.zeros((h, w), dtype='int')
+                masks.append(mask)
+            masks = np.array(masks)
+                
+            self.data_cache = {'image': image, 'masks': masks, 'name': name, 'index': n}
+
+        image_crop = self.data_cache['image'].crop((c*256, r*256, c*256 + 256, r*256 + 256))
+        masks_crop = self.data_cache['masks'][:, r*256:r*256+256, c*256:c*256+256]
+        image_crop = transforms.ToTensor()(image_crop)
+        masks_crop = torch.from_numpy(masks_crop)  
+        name = self.data_cache['name']+'(%d, %d)'%(r, c)
         
-        
-        image = transforms.ToTensor()(image)
-        mask = torch.from_numpy(mask)  
-        
-        return image, mask, name
+        return image_crop, masks_crop, name
 
 
 if __name__ == '__main__':
-    dataset = IDRiD_sub1_dataset('./data/sub1/train', 'MA')
+    dataset = IDRiD_sub1_dataset('./data/sub1/train', 'HE')
     print('dataset length: %d'%(len(dataset)))
+    #data formate test
     print('dataset sample')
-    print(dataset[random.randint(0, len(dataset)-1)])
-
+    image, mask, name = dataset[random.randint(0, len(dataset)-1)]
+    print(image, mask, name)
+    
+    #show image test
+    '''
+    import matplotlib.pyplot as plt
+    for i in range(len(dataset)):
+        image, mask, name = dataset[i]
+        print(image, mask, name)
+        plt.imshow(image)
+        plt.show()
+    '''
+    
+    # dataloader test
+    '''
+    from torch.utils.data import DataLoader
+    import time
+    t = time.time()
+    dataloader = DataLoader(dataset, batch_size=100, shuffle=False, num_workers=4)
+    for data in dataloader:
+        pass
+    print('%ds'%(time.time()-t))
+    '''
     
