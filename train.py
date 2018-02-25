@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*
 from dataset import IDRiD_sub1_dataset
 from util import evaluate, save_model
-from model import Model
+from model import FCN8s
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -13,7 +13,7 @@ import copy
 
 use_gpu = torch.cuda.is_available
 save_dir = "./saved_models"
-model_name = "net.pth"
+model_name = "test.pth"
 data_train_dir = './data/sub1/train'
 data_val_dir = './data/sub1/val'
 batch_size = 4
@@ -97,7 +97,6 @@ def train_model(model, num_epochs, dataloaders, criterion, optimizer):
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
-                save_model(model, save_dir, model_name)
         
         print()
     
@@ -111,9 +110,11 @@ def train_model(model, num_epochs, dataloaders, criterion, optimizer):
     return model
 
 if __name__ == '__main__':
+    # dataset
     dataloaders = make_dataloaders(batch_size=batch_size)
     
-    model = Model()
+    #model
+    model = FCN8s(4)
     if use_gpu:
         model = model.cuda()
         #model = torch.nn.DataParallel(model).cuda()
@@ -123,6 +124,7 @@ if __name__ == '__main__':
     optimizer = optim.Adam(model.parameters(), lr = lr)
     model = train_model(model, num_epochs, dataloaders, criterion, optimizer)
     
+    #save
     save_model(model, save_dir, model_name)
     
     

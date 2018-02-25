@@ -30,6 +30,8 @@ def save_model(model, save_dir, name):
     #save model
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    torch.save(model.state_dict(), os.path.join(save_dir, name))
+    path = os.path.join(save_dir, name)
+    print('Saving model to directory "%s"'%(path))
+    torch.save(model.state_dict(), path)
 
 
