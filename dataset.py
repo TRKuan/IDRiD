@@ -10,7 +10,7 @@ import random
 
 class IDRiD_sub1_dataset(Dataset):
     """
-    Put the images into these directory respectivly:
+    Put the images into these directories respectivly:
         Apparent Retinopathy, No Apparent Retinopathy, MA, EX, HE, SE
             
     It will load in the original 4288x2848 image and crop it into 16x11 small images with 
