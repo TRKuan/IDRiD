@@ -1,30 +1,36 @@
 # -*- coding: utf-8 -*
 import torch
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
 import numpy as np
 import os
 
-def evaluate(y_pred, y_true):
+def weighted_BCELoss(output, target, weights=None):
+
+    output = output.clamp(min=1e-5, max=1-1e-5)
+    if weights is not None:
+        assert len(weights) == 2
+
+        loss = -weights[0] * (target * torch.log(output)) - weights[1] * ((1 - target) * torch.log(1 - output))
+    else:
+        loss = -target * torch.log(output) - (1 - target) * torch.log(1 - output)
+
+    return torch.mean(loss)
+
+def evaluate(y_true, y_pred):
     '''
     Calculate statistic matrix.
     
     Args:
-        y_pred:the pytorch tensor of prediction
         y_true:the pytorch tensor of ground truth
+        y_pred:the pytorch tensor of prediction
+    return:
+        The F1 score
     '''
-    y_pred = np.rint(y_pred.numpy().flatten())
     y_true = y_true.numpy().flatten()
-    acc = accuracy_score(y_true, y_pred)
-    return acc
-    '''
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
-    accuracy = (tp+tn)/(tp+tn+fp+fn)
-    if tp+fn == 0: sensitivity = 0.0
-    else: sensitivity = tp/(tp+fn)
-    specificity = tn/(fp+tn)
-    ppv = tp/(tp+fp)
-    return sensitivity, specificity, ppv, accuracy
-    '''
+    y_pred = np.rint(y_pred.numpy().flatten())
+    f1 = f1_score(y_true, y_pred)
+    return f1
+
 
 def save_model(model, save_dir, name):
     #save model

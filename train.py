@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*
 from dataset import IDRiD_sub1_dataset
-from util import evaluate, save_model
-from model import FCN8s
+from util import evaluate, save_model, weighted_BCELoss
+from model import GCN
 import torch
 import torch.optim as optim
-import torch.nn as nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -13,11 +13,11 @@ import copy
 
 use_gpu = torch.cuda.is_available
 save_dir = "./saved_models"
-model_name = "test.pth"
+model_name = "gcn_v3.pth"
 data_train_dir = './data/sub1/train'
 data_val_dir = './data/sub1/val'
-batch_size = 4
-num_epochs = 10
+batch_size = 24
+num_epochs = 150
 lr = 1e-4
 
 def make_dataloaders(batch_size=batch_size):
@@ -29,10 +29,10 @@ def make_dataloaders(batch_size=batch_size):
     print('Training data: %d\nValidation data: %d'%((len(dataset_train)), len(dataset_val)))
     return dataloaders
 
-def train_model(model, num_epochs, dataloaders, criterion, optimizer):
+def train_model(model, num_epochs, dataloaders, optimizer, scheduler):
     since = time.time()
     best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
+    best_f1 = 0.0
     
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
@@ -45,11 +45,17 @@ def train_model(model, num_epochs, dataloaders, criterion, optimizer):
                 model.train(False)  # Set model to evaluate mode
         
             running_loss = 0.0
-            running_acc = 0.0
+            running_f1 = 0.0
             data_num = 0
             
             for idx, data in enumerate(dataloaders[phase]):
                 images, masks, names = data
+                
+                #weight for loss
+                weights = [5, 1]
+                if use_gpu:
+                    weights = torch.FloatTensor(weights).cuda()
+
     
                 if use_gpu:
                     images = images.cuda()
@@ -64,7 +70,8 @@ def train_model(model, num_epochs, dataloaders, criterion, optimizer):
                 #forward
                 
                 outputs = model(images)
-                loss = criterion(outputs, masks)
+                outputs = F.sigmoid(outputs)#remenber to apply sigmoid befor usage
+                loss = weighted_BCELoss(outputs, masks, weights)
                 
                 #backword
                 
@@ -73,37 +80,35 @@ def train_model(model, num_epochs, dataloaders, criterion, optimizer):
                     optimizer.step()
                 
                 # statistics
-                running_loss += loss.data[0] * images.size(0)
+                running_loss += loss.data[0]*images.size(0)
                 data_num += images.size(0)
-                
-                outputs = F.sigmoid(outputs).cpu().data#remenber to apply sigmoid befor usage
+                outputs = outputs.cpu().data
                 masks = masks.cpu().data
-                for i in range(len(outputs)):
-                    y_pred = outputs[i]
-                    y_true = masks[i]
-                    running_acc += evaluate(y_pred, y_true)
+                running_f1 += evaluate(masks, outputs)*images.size(0)
                 
                 #verbose
                 if idx%5==0 and idx!=0:
-                    print('\r{} {:.2f}%'.format(phase, 100*idx/len(dataloaders[phase])), end='')
+                    print('\r{} {:.2f}%'.format(phase, 100*idx/len(dataloaders[phase])), end='\r')
      
-            print()
-            
+            #print()
             epoch_loss = running_loss / data_num
-            epoch_acc = running_acc / data_num
-            print('{} Loss: {:.4f} Accuracy: {:.4f}'.format(phase, epoch_loss, epoch_acc))
-            
+            epoch_f1 = running_f1 / data_num
+            if phase == 'val':
+                scheduler.step(epoch_loss)
+            print('{} Loss: {:.4f} F1 score: {:.4f}'.format(phase, epoch_loss, epoch_f1))
             # deep copy the model
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
+            if phase == 'val' and epoch_f1 > best_f1:
+                best_f1 = epoch_f1
                 best_model_wts = copy.deepcopy(model.state_dict())
+                save_model(model, save_dir, model_name)
         
         print()
     
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
-    print('Best accuracy: {:.4f}'.format(best_acc))
+    
+    print('Best F1 score: {:.4f}'.format(best_f1))
 
     # load best model weights
     model.load_state_dict(best_model_wts)
@@ -114,15 +119,15 @@ if __name__ == '__main__':
     dataloaders = make_dataloaders(batch_size=batch_size)
     
     #model
-    model = FCN8s(4)
+    model = GCN(4, 256)
     if use_gpu:
         model = model.cuda()
         #model = torch.nn.DataParallel(model).cuda()
     
     #training
-    criterion = nn.BCEWithLogitsLoss(size_average=True)
     optimizer = optim.Adam(model.parameters(), lr = lr)
-    model = train_model(model, num_epochs, dataloaders, criterion, optimizer)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', verbose=True)
+    model = train_model(model, num_epochs, dataloaders, optimizer, scheduler)
     
     #save
     save_model(model, save_dir, model_name)

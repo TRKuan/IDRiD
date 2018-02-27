@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*
 from dataset import IDRiD_sub1_dataset
-from model import FCN8s
+from model import GCN, FCN8s
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import numpy as np
-from sklearn.metrics import recall_score
+from sklearn.metrics import f1_score
 import matplotlib.pyplot as plt
 import os
 
 use_gpu = torch.cuda.is_available
 save_dir = "./saved_models"
-model_name = "fcn8s.pth"
+model_name = "gcn_v3.pth"
 data_dir = './data/sub1/val'
 batch_size = 4
 
@@ -23,7 +23,7 @@ def show_image_sample():
 
     
     #model
-    model = FCN8s(4)
+    model = GCN(4, 256)
     if use_gpu:
         model = model.cuda()
         #model = torch.nn.DataParallel(model).cuda()
@@ -101,7 +101,7 @@ def run_statistic():
     print('Data: %d'%(len(dataset)))
     
     #model
-    model = FCN8s(4)
+    model = GCN(4, 256)
     if use_gpu:
         model = model.cuda()
         #model = torch.nn.DataParallel(model).cuda()
@@ -137,14 +137,14 @@ def run_statistic():
             print('\r{:.2f}%'.format(100*idx/len(dataloader)), end='')
     print()
     
-    recall = recall_score(np.array(y_pred_list).flatten(), np.array(y_true_list).flatten())
-    print('Recall: {:.4f}'.format(recall))
+    f1 = f1_score(np.array(y_true_list).flatten(), np.array(y_pred_list).flatten())
+    print('F1: {:.4f}'.format(f1))
 
     
     
 
 if __name__ == '__main__':
-    run_statistic()
+    #run_statistic()
     show_image_sample()
 
     

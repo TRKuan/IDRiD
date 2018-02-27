@@ -45,12 +45,13 @@ class IDRiD_sub1_dataset(Dataset):
             name = filename[:-4]
             self.data_idx.append((image_dir, mask_dirs, name))
         #NAR images
+        '''
         for filename in os.listdir(image_NAR_root):
             image_dir = os.path.join(image_NAR_root, filename)
             mask_dirs = {task_type:None for task_type in self.task_type_list}
             name = filename[:-4]
             self.data_idx.append((image_dir, mask_dirs, name))
-        
+        '''
         #Shuffle
         random.shuffle(self.data_idx)
         
