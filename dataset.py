@@ -13,8 +13,8 @@ class IDRiD_sub1_dataset(Dataset):
     Put the images into these directories respectivly:
         Apparent Retinopathy, No Apparent Retinopathy, MA, EX, HE, SE
             
-    It will load in the original 4288x2848 image and crop it into 16x11 small images with 
-    size of 256x256 on the fly.
+    It will load in the original 4288x2848 image and crop it into 9x6 small images with 
+    size of 512x512 on the fly.
     
     Use shuffle=False for this dataset as it caches only one image.
     
@@ -45,26 +45,24 @@ class IDRiD_sub1_dataset(Dataset):
             name = filename[:-4]
             self.data_idx.append((image_dir, mask_dirs, name))
         #NAR images
-        '''
         for filename in os.listdir(image_NAR_root):
             image_dir = os.path.join(image_NAR_root, filename)
             mask_dirs = {task_type:None for task_type in self.task_type_list}
             name = filename[:-4]
             self.data_idx.append((image_dir, mask_dirs, name))
-        '''
         #Shuffle
         random.shuffle(self.data_idx)
         
     def __len__(self):
-        return len(self.data_idx)*16*11
+        return len(self.data_idx)*9*6
 
     def __getitem__(self, idx):
-        # crop the 4288x2848 image into 256x256 => 16x11 grid
-        # 1 image => 16x11 = 176 small images
-        n = int(idx/(11*16))#image index
-        r = int((idx%(11*16))/16)#row
-        c = (idx%(11*16))%16#column
-        
+        # crop the 4288x2848 image into 512x512 => 9x6 grid
+        # 1 image => 9x6 = 54 small images
+        n = int(idx/(6*9))#image index
+        r = int((idx%(6*9))/9)#row
+        c = (idx%(6*9))%9#column
+                
         #Load the images if it's not in the cache
         if self.data_cache['index'] != n:
             image_dir, mask_dirs, name = self.data_idx[n]
@@ -82,38 +80,39 @@ class IDRiD_sub1_dataset(Dataset):
                     mask = np.zeros((h, w), dtype='float32')
                 masks.append(mask)
             masks = np.array(masks)
-                
+            masks = np.pad(masks, ((0, 0), (0, 224), (0, 320)), 'constant', constant_values=0)#padding
             self.data_cache = {'image': image, 'masks': masks, 'name': name, 'index': n}
-
-        #crop the image
-        image_crop = self.data_cache['image'].crop((c*256, r*256, c*256 + 256, r*256 + 256))
-        masks_crop = self.data_cache['masks'][:, r*256:r*256+256, c*256:c*256+256]
+                    
+        #crop the image   
+        image_crop = self.data_cache['image'].crop((c*512, r*512, c*512 + 512, r*512 + 512))
+        masks_crop = self.data_cache['masks'][:, r*512:r*512 + 512, c*512:c*512 + 512]
         image_crop = transforms.ToTensor()(image_crop)
         masks_crop = torch.from_numpy(masks_crop)
-        name = self.data_cache['name']+'(%d, %d)'%(r, c)
-        
+        name = self.data_cache['name']+'(%2d, %2d)'%(r, c)
         return image_crop, masks_crop, name
-
 
 if __name__ == '__main__':
     dataset = IDRiD_sub1_dataset('./data/sub1/train')
     print('dataset length: %d'%(len(dataset)))
     #data formate test
+    
     print('dataset sample')
     image, mask, name = dataset[random.randint(0, len(dataset)-1)]
     print(image, mask, name)
-    #show image test(need to comment out to tensor)
+    
+    #show image test
     '''
     import matplotlib.pyplot as plt
     for i in range(len(dataset)):
         image, mask, name = dataset[i]
         print(image, mask, name)
-        plt.imshow(image)
+        plt.imshow(transforms.ToPILImage()(image))
+        plt.show()
+        plt.imshow(mask.numpy()[1])
         plt.show()
     '''
-    
+
     # dataloader test
-    '''
     from torch.utils.data import DataLoader
     import time
     t = time.time()
@@ -121,5 +120,4 @@ if __name__ == '__main__':
     for data in dataloader:
         pass
     print('%ds'%(time.time()-t))
-    '''
     
